@@ -1,0 +1,264 @@
+#include <GL/glut.h>
+#include <bevgrafmath2017.h>
+#include <math.h>
+
+GLsizei winWidth = 800, winHeight = 600;
+vec2 v1 = vec2(50, 250);
+
+
+vec2 input[11] = {
+
+
+{35,344},
+{180,572},
+
+
+{130,310},
+{80,550},
+
+
+{135,310},
+{117,280},
+{306,88},
+{440,115},
+{365,295} ,
+{611,328},
+{640,227} };
+
+//Hermite Curve
+
+float tvalues[3] = { -2.0f, 0.0f,1.0f };
+
+GLint dragged = -1;
+
+void init() {
+	glClearColor(1.0, 1.0, 1.0, 0.0);
+	glMatrixMode(GL_PROJECTION);
+	gluOrtho2D(0.0, winWidth, 0.0, winHeight);
+	glShadeModel(GL_FLAT);
+	glEnable(GL_POINT_SMOOTH);
+	glPointSize(5.0);
+	glLineWidth(1.0);
+
+}
+mat4 calculateM() {
+
+
+
+	vec4 columns[4];
+
+	columns[0] = vec4( // column for p1 with t1
+		tvalues[0] * tvalues[0] * tvalues[0],
+		tvalues[0] * tvalues[0],
+		tvalues[0],
+		1);
+
+
+	columns[1] = vec4( // column for p2 with t2
+		tvalues[1] * tvalues[1] * tvalues[1],
+		tvalues[1] * tvalues[1],
+		tvalues[1],
+		1);
+
+
+	columns[2] = vec4( // column for v1 with t2
+		tvalues[2] * tvalues[2] * tvalues[2],
+		tvalues[2] * tvalues[2],
+		tvalues[2],
+		1);
+
+
+	columns[3] = vec4(// column for v2 with t2
+		3 * tvalues[0] * tvalues[0],
+		2 * tvalues[0],
+		1,
+		0);
+
+
+	mat4 M = { columns[0],  columns[1],  columns[2],  columns[3], true };
+	mat4 M_ = inverse(M);
+	return M_;
+
+}
+
+void drawHermite2WithMat() {
+
+
+	v1 = input[3] - input[0];
+
+	glBegin(GL_POINTS);
+	for (int i = 0; i < 4; i++)
+		glVertex2f(input[i].x, input[i].y);
+	glEnd();
+
+
+	glEnable(GL_LINE_STIPPLE);
+	glLineStipple(1, 0xFF00);
+	glBegin(GL_LINES); // drawing the tangent vectors
+	glVertex2f(input[0].x, input[0].y);
+	glVertex2f(input[3].x, input[3].y);
+
+	glEnd();
+	glDisable(GL_LINE_STIPPLE);
+
+	mat24 G = { input[0],  input[1],  input[2],  v1 };
+
+	mat4 M_ = calculateM();
+
+	mat24 C = G * M_;
+	glColor3f(1.0, 0.0, 0.0);
+	glBegin(GL_LINE_STRIP);
+	for (float t = tvalues[0]; t <= tvalues[2]; t += 0.01) { // loop through the interval of t
+		vec4 T = { t * t * t, 
+			t * t,
+			t,
+			1 };
+
+		vec2 curvePoint = C * T;
+		glVertex2f(curvePoint.x, curvePoint.y);
+	}
+	glEnd();
+
+}
+
+void drawBezierWithDeCasteljau() {
+	vec2 points2[7];
+	int l = 4;
+	for (int i = 0; i < 7; i++, l++) {
+		points2[i] = input[l];
+
+	}
+	glColor3f(0.0, 0.0, 0.0);
+	glBegin(GL_POINTS);//draw the points
+	for (int i = 0; i < 7; i++) {
+		glVertex2f(points2[i].x, points2[i].y);
+	}
+	glEnd();
+	glBegin(GL_LINE_STRIP); //draw the control polygon
+	for (int i = 0; i < 7; i++) {
+		glVertex2f(points2[i].x, points2[i].y);
+	}
+	glEnd();
+
+	int n = 6;
+
+	vec2 helperPoints[7]; // helper array to store the temporary vertices of the new iteration
+	for (int i = 0; i < n + 1; i++) 
+		helperPoints[i] = points2[i];
+
+	glColor3f(1.0, 0.0, 0.0);
+
+	glBegin(GL_LINE_STRIP);
+	for (float t = 0; t < 1; t += 0.01) { 
+		for (int r = 1; r <= n; r++) { // generations counter
+			for (int i = 0; i <= n - r; i++) { 
+				vec2 newPoint 
+				{ (1 - t) * helperPoints[i].x + t * helperPoints[i + 1].x,
+				(1 - t) * helperPoints[i].y + t * helperPoints[i + 1].y
+				};
+				helperPoints[i] = newPoint;
+			}
+		}
+		glVertex2f(helperPoints[0].x, helperPoints[0].y); 
+
+	}
+	glVertex2f(points2[n].x, points2[n].y);
+	glEnd();
+
+
+}
+
+void calculateSpecialControlPoints() {
+	int  n2 = 6;
+
+	input[4] = input[2]; 
+	float t = tvalues[2];
+	vec4 T = { 3 * t * t, 
+	2 * t,
+	1,
+	0 };
+	mat4 M_ = calculateM();
+	v1 = input[3] - input[0];
+	mat24 G = { input[0],  input[1],  input[2],  v1 };
+	mat24 C = G * M_; 
+	vec2 lasTangent = C * T;
+
+	input[5] = input[4] + (lasTangent / n2); 
+
+
+	// to darw last tangent
+	glEnable(GL_LINE_STIPPLE);
+	glLineStipple(1, 0xFF00);
+	glBegin(GL_LINES); // drawing the tangent vectors
+	glVertex2f(input[4].x, input[4].y);
+	glVertex2f(input[4].x + lasTangent.x, input[4].y + lasTangent.y);
+
+	glEnd();
+	glDisable(GL_LINE_STIPPLE);
+
+}
+
+
+void display() {
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glColor3f(1.0, 0.0, 0.0);
+
+	
+	calculateSpecialControlPoints();
+	drawBezierWithDeCasteljau();
+	drawHermite2WithMat();
+
+
+	glutSwapBuffers();
+}
+
+GLint getActivePoint1(vec2 p[], GLint size, GLint sens, GLint x, GLint y) {
+	GLint i, s = sens * sens;
+	vec2 P = { (float)x, (float)y };
+
+	for (i = 0; i < size; i++)
+		if (dist(p[i], P) < s)
+			return i;
+	return -1;
+}
+
+void processMouse(GLint button, GLint action, GLint xMouse, GLint yMouse) {
+	GLint i;
+	if (button == GLUT_LEFT_BUTTON && action == GLUT_DOWN)
+		if ((i = getActivePoint1(input, 11, 3, xMouse, winHeight - yMouse)) != -1)
+			dragged = i;
+
+	if (button == GLUT_LEFT_BUTTON && action == GLUT_UP)
+		dragged = -1;
+
+}
+
+void processMouseActiveMotion(GLint xMouse, GLint yMouse) {
+	GLint i;
+	if (dragged >= 0) {
+		input[dragged].x = xMouse;
+		input[dragged].y = winHeight - yMouse;
+		glutPostRedisplay();
+	}
+}
+
+
+
+int main(int argc, char** argv) {
+	glutInit(&argc, argv);
+	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+	glutInitWindowSize(winWidth, winHeight);
+	glutInitWindowPosition(100, 100);
+	glutCreateWindow("Computer Graphics");
+	init();
+	glutDisplayFunc(display);
+	glutMouseFunc(processMouse);
+	glutMotionFunc(processMouseActiveMotion);
+	glutMainLoop();
+	return 0;
+}
+
+
+
+
